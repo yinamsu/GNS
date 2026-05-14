@@ -76,9 +76,8 @@ async def run_crawl_cycle(env, force=False):
     chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
     gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
     model = await get_secure_key(env, "GEMINI_MODEL", "gemini-2.5-flash-lite")
-    if not token or not chat_id or not gemini_key: return "Missing Keys"
+    if not token or not chat_id or not gemini_key: return "Keys Missing"
 
-    count = 0
     for feed in DEFAULT_FEEDS:
         try:
             xml, _ = await fetch_url(feed['url'])
@@ -87,33 +86,35 @@ async def run_crawl_cycle(env, force=False):
                 if not force and await env.NEWS_KV.get(entry['id']): continue
                 
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                prompt = f"금융 뉴스 요약/분석하라:\n제목: {entry['title']}\n내용: {entry['description']}"
+                # 실명 제거 및 전문 분석가 페르소나 강화
+                prompt = f"""당신은 '글로벌 수석 금융 분석 에디터'입니다. 
+다음 뉴스를 전문적인 금융 리포트 스타일로 분석하세요.
+
+[분석 가이드라인]
+1. 거시 경제 흐름과 글로벌 증시/산업에 미칠 실질적 영향 분석.
+2. 시장 컨센서스와의 괴리나 투자자 주의 사항(리스크) 강조.
+3. 데이터 중심의 통찰력 있는 요약 (불필요한 수식어 배제).
+4. 제목은 눈에 띄게, 내용은 [핵심 요약] - [시장 영향] - [투자자 가이드] 순으로 작성.
+
+뉴스 제목: {entry['title']}
+뉴스 내용: {entry['description']}
+"""
                 res_txt, st = await fetch_url(g_url, method="POST", body={"contents": [{"parts": [{"text": prompt}]}]})
                 
                 if st == 200:
                     ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
                     msg = f"🔔 <b>[{feed['name']}]</b>\n\n{clean_for_tg(ans)}"
                     if entry['link']: msg += f"\n\n🔗 <a href='{entry['link']}'>원문 보기 (클릭)</a>"
-                    
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                     
-                    # 아카이브 저장 (CSV용)
                     archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
                     archive_list = json.loads(archive) if archive else []
-                    new_item = {
-                        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "source": feed['name'],
-                        "title": entry['title'],
-                        "summary": ans[:100].replace("\n", " ").strip(),
-                        "link": entry['link']
-                    }
+                    new_item = {"date": datetime.now().strftime("%Y-%m-%d %H:%M"), "source": feed['name'], "title": entry['title'], "summary": ans[:100].replace("\n", " ").strip(), "link": entry['link']}
                     archive_list.insert(0, new_item)
-                    await env.NEWS_KV.put("NEWS_ARCHIVE", json.dumps(archive_list[:500])) # 최대 500개 유지
-                    
+                    await env.NEWS_KV.put("NEWS_ARCHIVE", json.dumps(archive_list[:500]))
                     if not force: await env.NEWS_KV.put(entry['id'], "true")
-                    count += 1
         except: pass
-    return f"Crawled {count} new items."
+    return "Cycle Done"
 
 async def on_fetch(request, env, ctx):
     import js
@@ -121,15 +122,13 @@ async def on_fetch(request, env, ctx):
         url_str = request.url
         if "/download-csv" in url_str:
             archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
-            if not archive: return js.Response.new("No data to download.")
+            if not archive: return js.Response.new("No data.")
             data = json.loads(archive)
             csv = "Date,Source,Title,Summary,Link\n"
             for item in data:
-                # 간단한 CSV 이스케이프
                 r = [item['date'], item['source'], item['title'], item['summary'], item['link']]
                 csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
-            
-            headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=news_report.csv"}
+            headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=gns_report.csv"}
             return js.Response.new(csv, js.JSON.parse(json.dumps({"headers": headers})))
 
         if "/view-logs" in url_str:
@@ -143,24 +142,32 @@ async def on_fetch(request, env, ctx):
                 text = data["message"].get("text", "")
                 chat_id = data["message"]["chat"]["id"]
                 token = await get_secure_key(env, "TELEGRAM_TOKEN")
-                if text == "/csv":
+                if text == "/logs":
+                    logs = await env.NEWS_KV.get("SYSTEM_LOGS")
+                    logs_list = json.loads(logs) if logs else ["No logs."]
+                    msg = "📋 <b>GNS Logs:</b>\n\n" + "\n".join(logs_list)
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+                elif text == "/csv":
                     worker_url = js.URL.new(request.url).origin
-                    msg = f"📅 <b>최근 24시간 뉴스 리포트</b>\n\n아래 링크를 클릭하면 CSV 파일을 다운로드할 수 있습니다:\n\n{worker_url}/download-csv"
+                    msg = f"📅 <b>전략 리포트 아카이브</b>\n\n최근 기사 리포트 다운로드:\n\n{worker_url}/download-csv"
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                 elif text == "/crawl":
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 수집 중..."})
-                    res = await run_crawl_cycle(env)
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"✅ {res}"})
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 글로벌 모니터링 수집 중..."})
+                    await run_crawl_cycle(env)
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "✅ 수집 완료."})
+                elif text == "/test":
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🧪 분석 성능 테스트 중..."})
+                    await run_crawl_cycle(env, force=True)
                 elif text == "/start":
                     menu = {"commands": [
-                        {"command": "logs", "description": "로그"},
-                        {"command": "crawl", "description": "수집"},
+                        {"command": "logs", "description": "시스템 로그"},
+                        {"command": "crawl", "description": "즉시 뉴스 수집"},
                         {"command": "csv", "description": "리포트 다운로드"}
                     ]}
                     await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "👋 안녕하세요! 리포트 기능이 추가되었습니다."})
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "📰 <b>GNS Professional</b> 가동!\n\n메뉴를 확인하세요."})
             return js.Response.new("OK")
-        return js.Response.new("GNS Bot Running.")
+        return js.Response.new("GNS is Ready.")
     except Exception as e:
         return js.Response.new(f"CRASH: {str(e)}")
 
