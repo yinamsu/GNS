@@ -143,10 +143,12 @@ async def on_fetch(request, env, ctx):
             data = json.loads(archive)
             csv = "\ufeff날짜,매체,제목,링크,요약\n"
             for item in data:
-                # Excel hyperlink formula: =HYPERLINK("url", "display_text")
-                link_formula = f'=HYPERLINK("{item["link"]}", "클릭")'
-                r = [item['date'], item['source'], item['title'], link_formula, item['summary']]
-                # Escape double quotes for CSV and formula
+                # Clean on-the-fly for existing data
+                title = clean_for_csv(item.get('title', ''))
+                summary = clean_for_csv(item.get('summary', ''))
+                # Excel hyperlink formula: =HYPERLINK("url","display_text") - no spaces!
+                link_formula = f'=HYPERLINK("{item["link"]}","클릭")'
+                r = [item['date'], item['source'], title, link_formula, summary]
                 csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
             headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=gns_report.csv"}
             return js.Response.new(csv, js.JSON.parse(json.dumps({"headers": headers})))
