@@ -1,6 +1,7 @@
 name = "global-news-scrapper"
 main = "src/index.py"
 compatibility_date = "2024-05-01"
+compatibility_flags = ["python_workers"]
 
 # 1분마다 실행되는 스케줄러 설정
 [triggers]
