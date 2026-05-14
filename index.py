@@ -54,6 +54,10 @@ def parse_rss(xml_content):
         return items
     except: return []
 
+def safe_html(text):
+    # 텔레그램 HTML 모드에서 에러를 유발하는 문자들 제거
+    return text.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;").replace("*", "")
+
 async def on_fetch(request, env, ctx):
     import js
     try:
@@ -62,30 +66,24 @@ async def on_fetch(request, env, ctx):
             logs = await env.NEWS_KV.get("SYSTEM_LOGS")
             return js.Response.new(logs or "No logs.")
         
-        if "/test-crawl" in url_str:
-            token = await get_secure_key(env, "TELEGRAM_TOKEN")
-            chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
-            gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
-            # 모델명을 KV에서 가져옴 (기본값 gemini-1.5-flash)
-            model = await get_secure_key(env, "GEMINI_MODEL", "gemini-1.5-flash")
+        if request.method == "POST":
+            # 가장 안전한 방식으로 바디 읽기
+            raw = await request.text()
+            data = json.loads(raw)
+            await log_to_kv(env, f"Cmd Received")
             
-            xml, _ = await fetch_url(DEFAULT_FEEDS[0]['url'])
-            items = parse_rss(xml)
-            if not items: return js.Response.new("No items.")
+            if "message" in data:
+                chat_id = data["message"]["chat"]["id"]
+                token = await get_secure_key(env, "TELEGRAM_TOKEN")
+                logs = await env.NEWS_KV.get("SYSTEM_LOGS")
+                logs_list = json.loads(logs) if logs else ["No logs."]
+                msg = "📋 <b>GNS Status Log:</b>\n\n" + "\n".join(logs_list)
+                await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+            return js.Response.new("OK")
             
-            entry = items[0]
-            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-            p_load = {"contents": [{"parts": [{"text": f"요약: {entry['title']}"}]}]}
-            res_txt, status = await fetch_url(g_url, method="POST", body=p_load)
-            
-            if status == 200:
-                ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
-                await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"🧪 <b>TEST ({model})</b>\n\n{ans}", "parse_mode": "HTML"})
-                return js.Response.new(f"OK ({model}): {entry['title']}")
-            return js.Response.new(f"Gemini Error ({model}): {status} - {res_txt}")
-
         return js.Response.new("GNS Bot is Running.")
     except Exception as e:
+        await log_to_kv(env, f"Fetch Error: {str(e)}")
         return js.Response.new(f"CRASH: {str(e)}")
 
 async def on_scheduled(event, env, ctx):
@@ -93,7 +91,7 @@ async def on_scheduled(event, env, ctx):
     token = await get_secure_key(env, "TELEGRAM_TOKEN")
     chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
     gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
-    model = await get_secure_key(env, "GEMINI_MODEL", "gemini-1.5-flash")
+    model = await get_secure_key(env, "GEMINI_MODEL", "gemini-2.5-flash-lite")
     if not token or not chat_id or not gemini_key: return
 
     for feed in DEFAULT_FEEDS:
@@ -102,13 +100,19 @@ async def on_scheduled(event, env, ctx):
             items = parse_rss(xml)
             for entry in items[:2]:
                 if await env.NEWS_KV.get(entry['id']): continue
+                
+                await log_to_kv(env, f"News: {entry['title'][:20]}")
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                p_load = {"contents": [{"parts": [{"text": f"금융 뉴스 요약: {entry['title']}\n{entry['description']}"}]}]}
-                res_txt, st = await fetch_url(g_url, method="POST", body=p_load)
+                prompt = f"금융 분석(한국어 요약): {entry['title']}\n{entry['description']}"
+                res_txt, st = await fetch_url(g_url, method="POST", body={"contents": [{"parts": [{"text": prompt}]}]})
+                
                 if st == 200:
                     ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
-                    msg = f"🔔 <b>{feed['name']}</b>\n\n{ans}\n\n<a href='{entry['link']}'>원문 보기</a>"
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+                    # HTML 안전 처리 추가
+                    clean_ans = safe_html(ans)
+                    msg = f"🔔 <b>{feed['name']}</b>\n\n{clean_ans}\n\n<a href='{entry['link']}'>원문 보기</a>"
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML", "disable_web_page_preview": False})
                     await env.NEWS_KV.put(entry['id'], "true")
-        except: pass
+        except Exception as e:
+            await log_to_kv(env, f"Err: {str(e)[:50]}")
     await log_to_kv(env, "Cron Done")
