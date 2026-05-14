@@ -57,43 +57,56 @@ def parse_rss(xml_content):
 async def on_fetch(request, env, ctx):
     import js
     try:
-        path = js.URL.new(request.url).pathname
-        
-        if path == "/view-logs":
+        url_str = request.url
+        if "/view-logs" in url_str:
             logs = await env.NEWS_KV.get("SYSTEM_LOGS")
             return js.Response.new(logs or "No logs.")
         
-        if path == "/test-crawl":
-            await log_to_kv(env, "Manual Test")
+        if "/test-crawl" in url_str:
             token = await get_secure_key(env, "TELEGRAM_TOKEN")
             chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
             gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
             
             xml, _ = await fetch_url(DEFAULT_FEEDS[0]['url'])
             items = parse_rss(xml)
-            if not items: return js.Response.new("No news items found.")
+            if not items: return js.Response.new("No items.")
             
             entry = items[0]
-            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-lite-latest:generateContent?key={gemini_key}"
-            p_load = {"contents": [{"parts": [{"text": f"요약: {entry['title']}"}]}]}
+            # 모델명을 gemini-1.5-flash로 수정
+            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+            p_load = {"contents": [{"parts": [{"text": f"한국어로 요약: {entry['title']}"}]}]}
             res_txt, status = await fetch_url(g_url, method="POST", body=p_load)
             
             if status == 200:
                 ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
-                msg = f"🧪 <b>TEST</b>\n\n{ans}"
-                await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
-                return js.Response.new(f"Success: {entry['title']}")
-            return js.Response.new(f"Gemini Error: {status}")
+                await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"🧪 <b>TEST</b>\n\n{ans}", "parse_mode": "HTML"})
+                return js.Response.new(f"OK: {entry['title']}")
+            return js.Response.new(f"Gemini Error: {status} - {res_txt}")
 
-        if request.method == "POST":
-            # 텔레그램 명령어 처리 (기존 로직 동일)
-            return js.Response.new("OK")
-            
         return js.Response.new("GNS Bot is Running.")
     except Exception as e:
-        # 모든 에러를 화면에 표시!
         return js.Response.new(f"CRASH: {str(e)}")
 
 async def on_scheduled(event, env, ctx):
-    # (생략 - 통신 테스트 완료 후 복구 예정)
-    pass
+    await log_to_kv(env, "Cron Start")
+    token = await get_secure_key(env, "TELEGRAM_TOKEN")
+    chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
+    gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
+    if not token or not chat_id or not gemini_key: return
+
+    for feed in DEFAULT_FEEDS:
+        try:
+            xml, _ = await fetch_url(feed['url'])
+            items = parse_rss(xml)
+            for entry in items[:2]:
+                if await env.NEWS_KV.get(entry['id']): continue
+                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                p_load = {"contents": [{"parts": [{"text": f"금융 분석(한국어 요약): {entry['title']}\n{entry['description']}"}]}]}
+                res_txt, st = await fetch_url(g_url, method="POST", body=p_load)
+                if st == 200:
+                    ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
+                    msg = f"🔔 <b>{feed['name']}</b>\n\n{ans}\n\n<a href='{entry['link']}'>원문 보기</a>"
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+                    await env.NEWS_KV.put(entry['id'], "true")
+        except: pass
+    await log_to_kv(env, "Cron Done")
