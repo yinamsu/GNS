@@ -72,6 +72,14 @@ def clean_for_tg(text):
     t = t.replace("##", "<b>■</b>").replace("#", "<b>•</b>")
     return t
 
+def clean_for_csv(text):
+    import re
+    # Remove markdown bold/header symbols
+    t = re.sub(r'[*#\-]', '', text)
+    # Normalize multiple newlines
+    t = re.sub(r'\n+', '\n', t)
+    return t.strip()
+
 async def run_crawl_cycle(env, force=False):
     token = await get_secure_key(env, "TELEGRAM_TOKEN")
     chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
@@ -115,7 +123,8 @@ async def run_crawl_cycle(env, force=False):
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                     archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
                     archive_list = json.loads(archive) if archive else []
-                    new_item = {"date": datetime.now().strftime("%Y-%m-%d %H:%M"), "source": feed['name'], "title": entry['title'], "summary": ans[:100].replace("\n", " ").strip(), "link": entry['link']}
+                    summary_clean = clean_for_csv(ans[:500])
+                    new_item = {"date": datetime.now().strftime("%y/%m/%d %H:%M"), "source": feed['name'], "title": entry['title'], "summary": summary_clean, "link": entry['link']}
                     archive_list.insert(0, new_item)
                     await env.NEWS_KV.put("NEWS_ARCHIVE", json.dumps(archive_list[:500]))
                     if not force: await env.NEWS_KV.put(entry['id'], "true")
@@ -132,9 +141,9 @@ async def on_fetch(request, env, ctx):
             archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
             if not archive: return js.Response.new("No data.")
             data = json.loads(archive)
-            csv = "\ufeff날짜,매체,링크,제목,요약\n"
+            csv = "\ufeff날짜,매체,제목,링크,요약\n"
             for item in data:
-                r = [item['date'], item['source'], item['link'], item['title'], item['summary']]
+                r = [item['date'], item['source'], item['title'], item['link'], item['summary']]
                 csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
             headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=gns_report.csv"}
             return js.Response.new(csv, js.JSON.parse(json.dumps({"headers": headers})))
