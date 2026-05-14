@@ -1,27 +1,37 @@
-# 🌐 GNS (Global News System)
+# 🌐 GNS Professional (Global News System)
 
-**GNS**는 전 세계 주요 금융 및 비즈니스 뉴스를 실시간으로 모니터링하고, Google Gemini 2.5 AI를 통해 핵심 인사이트를 요약 분석하여 텔레그램으로 전달하는 스마트 뉴스 비서입니다.
+**GNS Professional**은 전 세계 주요 금융, 비즈니스, 테크 뉴스를 실시간으로 모니터링하고, 최첨단 AI(Gemini 2.5)를 통해 전문 기자 수준의 심층 분석 리포트를 생성하는 스마트 뉴스 자동화 시스템입니다.
 
-## ✨ 주요 기능
-- **24/7 실시간 모니터링**: Cloudflare Workers의 크론 트립(Cron Trigger)을 사용하여 1분 단위로 전 세계 RSS 피드를 감시합니다.
-- **AI 인사이트 분석**: 최신 **Gemini 2.5 Flash-lite** 모델을 활용하여 방대한 뉴스를 [요약], [분석], [제언]의 3단계로 정제합니다.
-- **서버리스 아키텍처**: 별도의 서버 유지보수 없이 Cloudflare 인프라 위에서 영구적으로 가동됩니다.
-- **제로 디펜던시 (Zero-Dependency)**: 외부 라이브러리 없이 Python 표준 라이브러리만을 사용하여 극한의 안정성과 배포 속도를 보장합니다.
-- **KV 기반 데이터 영속성**: Cloudflare KV를 활용하여 뉴스 중복 수집을 방지하고, 시스템 로그 및 API 키를 안전하게 보관합니다.
-- **텔레그램 대화형 인터페이스**: `/logs`, `/crawl`, `/test` 등의 명령어를 통해 모바일에서 직접 봇을 제어할 수 있습니다.
+## ✨ 핵심 기능
+
+### 1. 전 세계 경제 지형 모니터링 (Global Coverage)
+- **미국/유럽/일본 등 글로벌 채널**: SEC, Bloomberg, Reuters, FT, WSJ, Nikkei Asia, Japan Times, Handelsblatt, BBC 등 주요 10개 이상의 글로벌 매체를 24/7 감시합니다.
+- **실시간 크롤링**: Cloudflare Workers의 스케줄러를 통해 지연 없이 최신 속보를 포착합니다.
+
+### 2. 전문 기자급 AI 심층 분석 (Reporter-Centric AI)
+- **전문가 페르소나**: 단순 요약을 넘어 증권부 기자의 시각으로 [핵심 요약] - [심층 분석] - [시장 영향 & 리스크] - [투자자 가이드]를 도출합니다.
+- **맞춤형 필터링**: 사용자의 취재 편의를 위해 본인의 기사가 중복 분석되지 않도록 스마트 필터링 로직이 적용되어 있습니다.
+
+### 3. 전략 리포트 아카이브 (CSV Export)
+- **CSV 리포트 다운로드**: 지난 24시간 동안 수집된 모든 뉴스를 하나의 CSV 파일로 내려받을 수 있습니다.
+- **엑셀 최적화 (Excel-Ready)**:
+    - **UTF-8 BOM** 적용으로 한글 깨짐 완벽 방지
+    - **=HYPERLINK** 수식 적용으로 엑셀에서 즉시 원문 이동 가능
+    - **가독성 중심 열 배치**: 날짜, 매체, 제목, 링크, 요약 순으로 최적화
+
+### 4. 텔레그램 통합 관제
+- **/start**: 시스템 초기화 및 메뉴 자동 등록
+- **/crawl**: 즉시 전 세계 채널 뉴스 수집 및 분석
+- **/csv**: 분석된 리포트 아카이브 다운로드 링크 생성
+- **/test**: AI 분석 성능 강제 테스트 (중복 무시)
+- **/logs**: 시스템 운영 상태 및 활동 로그 확인
 
 ## 🛠 기술 스택
 - **Runtime**: Cloudflare Workers (Python Environment)
-- **AI Engine**: Google Gemini 1.5/2.5 Flash-lite
-- **Storage**: Cloudflare Workers KV
-- **Communication**: Telegram Bot API (Webhook)
-- **Language**: Pure Python 3.13 (Native Library Only)
-
-## ⌨️ 텔레그램 명령어
-- `/start`: 봇 초기 설정 및 메뉴판 등록
-- `/logs`: 최근 30개의 시스템 활동 로그 확인
-- `/crawl`: 즉시 뉴스 수집 및 분석 실행
-- `/test`: 최신 뉴스 1건에 대해 중복 무시 강제 분석 실행
+- **AI Engine**: Google Gemini 2.5 Flash-lite (Multimodal ready)
+- **Storage**: Cloudflare Workers KV (State & Key Management)
+- **Communication**: Telegram Bot API
+- **Language**: Python 3.13 (Serverless optimized)
 
 ---
-*Developed by yinam. Designed for Financial Journalists & Analysts.*
+*Developed for Pro Journalists & Analysts. Stay Ahead of the Global Market.*
