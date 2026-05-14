@@ -141,7 +141,7 @@ async def on_fetch(request, env, ctx):
             archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
             if not archive: return js.Response.new("No data.")
             data = json.loads(archive)
-            csv = "\ufeff매체,날짜,제목,링크,요약\n"
+            csv = "\ufeff매체          ,날짜          ,제목                                        ,링크            ,요약\n"
             for item in data:
                 # Clean on-the-fly for existing data
                 date_val = item.get('date', '').replace("/", ".")
@@ -150,9 +150,14 @@ async def on_fetch(request, env, ctx):
                 
                 title = clean_for_csv(item.get('title', ''))
                 summary = clean_for_csv(item.get('summary', ''))
-                # Excel hyperlink formula: =HYPERLINK("url","display_text") - no spaces!
                 link_formula = f'=HYPERLINK("{item["link"]}","▶ 원문보기")'
-                r = [item['source'], date_val, title, link_formula, summary]
+                r = [
+                    item['source'].ljust(12),
+                    date_val.ljust(12),
+                    title.ljust(40),
+                    link_formula.ljust(15),
+                    summary
+                ]
                 csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
             headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=gns_report.csv"}
             return js.Response.new(csv, js.JSON.parse(json.dumps({"headers": headers})))
