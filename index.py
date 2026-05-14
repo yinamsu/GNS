@@ -22,40 +22,35 @@ async def fetch_url(url, method="POST", body=None):
 
 async def on_fetch(request, env, ctx):
     import js
-    method = request.method
-    await log_to_kv(env, f"Signal In: {method}")
+    # 모든 변수 이름 확인 (디버깅용)
+    try:
+        keys = js.Object.keys(env)
+        await log_to_kv(env, f"Available Keys: {list(keys)}")
+    except: pass
+
+    # 변수 가져오기 (가장 확실한 방법들 시도)
+    token = getattr(env, "TELEGRAM_TOKEN", None) or env.TELEGRAM_TOKEN
+    chat_id = getattr(env, "TELEGRAM_CHAT_ID", "64106898") or env.TELEGRAM_CHAT_ID
     
-    token = getattr(env, "TELEGRAM_TOKEN", "")
-    chat_id = getattr(env, "TELEGRAM_CHAT_ID", "64106898")
-    
-    if method == "POST":
+    valid = bool(token)
+    await log_to_kv(env, f"Token Check: {valid}")
+
+    if request.method == "POST":
         try:
-            data = await request.json()
-            await log_to_kv(env, f"Data: {str(data)[:50]}")
-            
-            if "message" in data:
-                text = data["message"].get("text", "")
-                await log_to_kv(env, f"Cmd: {text}")
-                
-                # 어떤 명령이든 로그 리포트
-                logs = await env.NEWS_KV.get("SYSTEM_LOGS")
-                logs_list = json.loads(logs) if logs else ["No logs."]
-                msg = "📋 <b>Status</b>\n\n" + "\n".join(logs_list)
-                
+            if valid:
+                data = await request.json()
+                msg = f"📩 Signal: {str(data)[:50]}"
                 t_url = f"https://api.telegram.org/bot{token}/sendMessage"
-                await fetch_url(t_url, body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
-            
+                await fetch_url(t_url, body={"chat_id": chat_id, "text": msg})
             return js.Response.new("OK")
-        except Exception as e:
-            await log_to_kv(env, f"Err: {str(e)}")
+        except:
+            return js.Response.new("Error")
     
-    # 브라우저 접속(GET) 시 테스트 메시지 발송
-    if method == "GET":
-        t_url = f"https://api.telegram.org/bot{token}/sendMessage"
-        await fetch_url(t_url, body={"chat_id": chat_id, "text": "🌐 Browser access detected!"})
-        return js.Response.new(f"GNS Running. Token valid: {bool(token)}")
+    if request.method == "GET":
+        if valid:
+            t_url = f"https://api.telegram.org/bot{token}/sendMessage"
+            await fetch_url(t_url, body={"chat_id": chat_id, "text": "✅ Server Linked!"})
+        return js.Response.new(f"GNS Running. Token valid: {valid}")
 
 async def on_scheduled(event, env, ctx):
-    await log_to_kv(env, "Cron Start")
-    # ... (기존 크론 로직 생략 - 일단은 통신부터 잡겠습니다)
     pass
