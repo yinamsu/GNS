@@ -78,13 +78,14 @@ async def run_crawl_cycle(env, force=False):
     model = await get_secure_key(env, "GEMINI_MODEL", "gemini-2.5-flash-lite")
     if not token or not chat_id or not gemini_key: return "Keys Missing"
 
+    count = 0
     for feed in DEFAULT_FEEDS:
         try:
             xml, _ = await fetch_url(feed['url'])
             items = parse_rss(xml)
-            for entry in items[:1]:
+            targets = items[:1]
+            for entry in targets:
                 if not force and await env.NEWS_KV.get(entry['id']): continue
-                
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
                 prompt = f"""당신은 '글로벌 수석 금융 분석 에디터'입니다. 
 다음 뉴스를 전문적인 금융 리포트 스타일로 분석하세요.
@@ -99,21 +100,21 @@ async def run_crawl_cycle(env, force=False):
 뉴스 내용: {entry['description']}
 """
                 res_txt, st = await fetch_url(g_url, method="POST", body={"contents": [{"parts": [{"text": prompt}]}]})
-                
                 if st == 200:
                     ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
                     msg = f"🔔 <b>[{feed['name']}]</b>\n\n{clean_for_tg(ans)}"
                     if entry['link']: msg += f"\n\n🔗 <a href='{entry['link']}'>원문 보기 (클릭)</a>"
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
-                    
                     archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
                     archive_list = json.loads(archive) if archive else []
                     new_item = {"date": datetime.now().strftime("%Y-%m-%d %H:%M"), "source": feed['name'], "title": entry['title'], "summary": ans[:100].replace("\n", " ").strip(), "link": entry['link']}
                     archive_list.insert(0, new_item)
                     await env.NEWS_KV.put("NEWS_ARCHIVE", json.dumps(archive_list[:500]))
                     if not force: await env.NEWS_KV.put(entry['id'], "true")
+                    count += 1
+                    if force: return f"성공: {entry['title'][:15]}"
         except: pass
-    return "Cycle Done"
+    return f"Processed {count} feeds."
 
 async def on_fetch(request, env, ctx):
     import js
@@ -129,7 +130,6 @@ async def on_fetch(request, env, ctx):
                 csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
             headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=gns_report.csv"}
             return js.Response.new(csv, js.JSON.parse(json.dumps({"headers": headers})))
-
         if "/view-logs" in url_str:
             logs = await env.NEWS_KV.get("SYSTEM_LOGS")
             return js.Response.new(logs or "No logs.")
@@ -148,24 +148,24 @@ async def on_fetch(request, env, ctx):
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                 elif text == "/csv":
                     worker_url = js.URL.new(request.url).origin
-                    msg = f"📅 <b>전략 리포트 아카이브</b>\n\n최근 수집된 기사 리포트 다운로드:\n\n{worker_url}/download-csv"
+                    msg = f"📅 <b>전략 리포트 아카이브</b>\n\n최근 기사 리포트 다운로드:\n\n{worker_url}/download-csv"
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                 elif text == "/crawl":
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 글로벌 모니터링 수집 중..."})
-                    await run_crawl_cycle(env)
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "✅ 수집 완료."})
+                    res = await run_crawl_cycle(env)
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"✅ {res}"})
                 elif text == "/test":
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🧪 분석 성능 테스트 중..."})
-                    await run_crawl_cycle(env, force=True)
+                    res = await run_crawl_cycle(env, force=True)
                 elif text == "/start":
                     menu = {"commands": [
-                        {"command": "logs", "description": "시스템 로그"},
+                        {"command": "logs", "description": "시스템 로그 확인"},
                         {"command": "crawl", "description": "즉시 뉴스 수집"},
+                        {"command": "test", "description": "분석 성능 테스트"},
                         {"command": "csv", "description": "리포트 다운로드"}
                     ]}
                     await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
-                    # parse_mode="HTML" 추가
-                    welcome = "📰 <b>GNS Professional</b> 가동!\n\n아래 <b>메뉴 버튼</b>을 눌러 명령어를 확인하세요."
+                    welcome = "📰 <b>GNS Professional</b> 가동!\n\n아래 <b>메뉴 버튼</b>을 눌러 4개의 명령어를 확인하세요."
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": welcome, "parse_mode": "HTML"})
             return js.Response.new("OK")
         return js.Response.new("GNS is Ready.")
