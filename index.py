@@ -8,27 +8,28 @@ DEFAULT_FEEDS = [
     {"name": "Reuters Business", "url": "https://www.reutersagency.com/feed/?best-topics=business&post_type=best"}
 ]
 
-# KV에 로그 저장 (최신 30줄 유지)
 async def log_to_kv(env, message):
-    timestamp = datetime.now().strftime("%m-%d %H:%M:%S")
+    timestamp = datetime.now().strftime("%H:%M:%S")
     full_log = f"[{timestamp}] {message}"
-    print(full_log) # 대시보드 로그용
-    
+    print(full_log)
     try:
-        current_logs = await env.NEWS_KV.get("SYSTEM_LOGS")
-        logs_list = json.loads(current_logs) if current_logs else []
+        logs = await env.NEWS_KV.get("SYSTEM_LOGS")
+        logs_list = json.loads(logs) if logs else []
         logs_list.insert(0, full_log)
-        logs_list = logs_list[:30] # 30줄만 유지
-        await env.NEWS_KV.put("SYSTEM_LOGS", json.dumps(logs_list))
+        await env.NEWS_KV.put("SYSTEM_LOGS", json.dumps(logs_list[:30]))
     except: pass
 
 async def fetch_url(url, method="GET", body=None, headers=None):
     import js
+    # Python dict를 JS object로 변환하는 가장 안전한 방법
     options = {"method": method}
     if body: options["body"] = body
     if headers: options["headers"] = headers
-    response = await js.fetch(url, js.Object.fromEntries(js.Map.new(options.items())))
-    return await response.text(), response.status
+    
+    js_options = js.JSON.parse(json.dumps(options))
+    response = await js.fetch(url, js_options)
+    text = await response.text()
+    return text, response.status
 
 def parse_rss(xml_content):
     try:
@@ -46,33 +47,37 @@ def parse_rss(xml_content):
         return items
     except: return []
 
-# 텔레그램 명령어 처리 (Webhook 대응)
 async def on_fetch(request, env, ctx):
+    import js
     if request.method == "POST":
         try:
             body = await request.json()
+            await log_to_kv(env, "Telegram signal received!")
+            
             if "message" in body and "text" in body["message"]:
                 text = body["message"]["text"]
                 chat_id = body["message"]["chat"]["id"]
                 
-                if text == "/logs":
+                if text == "/logs" or text == "/start":
+                    await log_to_kv(env, f"Processing command: {text}")
                     logs = await env.NEWS_KV.get("SYSTEM_LOGS")
-                    logs_list = json.loads(logs) if logs else ["No logs found."]
-                    response_text = "📋 <b>최근 로그 30줄</b>\n\n" + "\n".join(logs_list)
+                    logs_list = json.loads(logs) if logs else ["No logs."]
+                    response_text = "📋 <b>GNS Status Log</b>\n\n" + "\n".join(logs_list)
                     
                     token = getattr(env, "TELEGRAM_TOKEN", "")
                     t_url = f"https://api.telegram.org/bot{token}/sendMessage"
                     t_data = json.dumps({"chat_id": chat_id, "text": response_text, "parse_mode": "HTML"})
                     await fetch_url(t_url, method="POST", body=t_data, headers={"Content-Type": "application/json"})
-                    return js.Response.new("OK", status=200)
-        except: pass
+                    
+            return js.Response.new("OK")
+        except Exception as e:
+            await log_to_kv(env, f"Fetch Error: {str(e)}")
+            return js.Response.new("Error")
     
-    import js
-    return js.Response.new("GNS Worker is Running", status=200)
+    return js.Response.new("GNS Worker is Running")
 
 async def on_scheduled(event, env, ctx):
-    await log_to_kv(env, "Starting scheduled news crawl...")
-    
+    await log_to_kv(env, "Starting News Crawl...")
     token = getattr(env, "TELEGRAM_TOKEN", None)
     chat_id = getattr(env, "TELEGRAM_CHAT_ID", None)
     gemini_key = getattr(env, "GEMINI_API_KEY", None)
@@ -83,28 +88,21 @@ async def on_scheduled(event, env, ctx):
             if status != 200: continue
             
             items = parse_rss(xml_text)
-            for entry in items[:3]:
+            for entry in items[:2]:
                 if await env.NEWS_KV.get(entry['id']): continue
                 
-                await log_to_kv(env, f"New post: {entry['title'][:20]}...")
-                
+                # Gemini REST
                 gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-lite-latest:generateContent?key={gemini_key}"
                 payload = json.dumps({"contents": [{"parts": [{"text": f"분석하라: {entry['title']}\n{entry['description']}"}]}]})
-                
                 res_text, res_status = await fetch_url(gemini_url, method="POST", body=payload, headers={"Content-Type": "application/json"})
-                if res_status != 200: continue
                 
-                res_json = json.loads(res_text)
-                insight = res_json['candidates'][0]['content']['parts'][0]['text']
-                
-                msg = f"🔔 <b>{feed['name']}</b>\n\n{insight}\n\n<a href='{entry['link']}'>원문 보기</a>"
-                t_url = f"https://api.telegram.org/bot{token}/sendMessage"
-                t_data = json.dumps({"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
-                await fetch_url(t_url, method="POST", body=t_data, headers={"Content-Type": "application/json"})
-                
-                await env.NEWS_KV.put(entry['id'], "true")
-                
-        except Exception as e:
-            await log_to_kv(env, f"Error in {feed['name']}: {str(e)[:50]}")
-
-    await log_to_kv(env, "Crawl finished.")
+                if res_status == 200:
+                    res_json = json.loads(res_text)
+                    insight = res_json['candidates'][0]['content']['parts'][0]['text']
+                    msg = f"🔔 <b>{feed['name']}</b>\n\n{insight}\n\n<a href='{entry['link']}'>원문 보기</a>"
+                    t_url = f"https://api.telegram.org/bot{token}/sendMessage"
+                    t_data = json.dumps({"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+                    await fetch_url(t_url, method="POST", body=t_data, headers={"Content-Type": "application/json"})
+                    await env.NEWS_KV.put(entry['id'], "true")
+        except: pass
+    await log_to_kv(env, "Crawl Finished.")
