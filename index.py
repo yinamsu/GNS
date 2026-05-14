@@ -2,7 +2,7 @@ import json
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
-# 글로벌 금융 분석용 피드 대폭 확장
+# 10대 글로벌 핵심 금융 피드 (미국, 유럽, 일본/아시아 포함)
 DEFAULT_FEEDS = [
     {"name": "SEC News", "url": "https://www.sec.gov/news/pressreleases.rss"},
     {"name": "Bloomberg", "url": "https://www.bloomberg.com/feeds/bfinance/most-read.xml"},
@@ -10,7 +10,10 @@ DEFAULT_FEEDS = [
     {"name": "WSJ Markets", "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"},
     {"name": "CNBC Finance", "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069"},
     {"name": "FT World", "url": "https://www.ft.com/?format=rss"},
-    {"name": "MarketWatch", "url": "http://feeds.marketwatch.com/marketwatch/topstories/"}
+    {"name": "MarketWatch", "url": "http://feeds.marketwatch.com/marketwatch/topstories/"},
+    {"name": "Nikkei Asia", "url": "https://asia.nikkei.com/rss/feed/nar"},
+    {"name": "Euronews Biz", "url": "https://www.euronews.com/rss?level=vertical&name=business"},
+    {"name": "BBC Business", "url": "https://feeds.bbci.co.uk/news/business/rss.xml"}
 ]
 
 async def log_to_kv(env, message):
@@ -89,7 +92,6 @@ async def run_crawl_cycle(env, force=False):
         try:
             xml, _ = await fetch_url(feed['url'])
             items = parse_rss(xml)
-            # 피드가 많으므로 일반 크론에서는 피드당 1개만, 테스트에서는 1개만
             process_items = items[:1]
             for entry in process_items:
                 if not force and await env.NEWS_KV.get(entry['id']): continue
@@ -107,7 +109,7 @@ async def run_crawl_cycle(env, force=False):
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML", "disable_web_page_preview": False})
                     if not force: await env.NEWS_KV.put(entry['id'], "true")
                     count += 1
-                    if force: return f"테스트 성공: {entry['title'][:15]}"
+                    if force: return f"성공: {entry['title'][:15]}"
         except: pass
     return f"Processed {count} feeds."
 
@@ -132,16 +134,16 @@ async def on_fetch(request, env, ctx):
                     msg = "📋 <b>GNS Logs:</b>\n\n" + "\n".join(logs_list)
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                 elif text == "/crawl":
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 글로벌 뉴스 즉시 수집 중..."})
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 10개 글로벌 피드 수집 중..."})
                     res = await run_crawl_cycle(env)
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"✅ {res}"})
                 elif text == "/test":
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🧪 테스트 전송 중..."})
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🧪 테스트 분석 중..."})
                     res = await run_crawl_cycle(env, force=True)
                 elif text == "/start":
                     menu = {"commands": [{"command": "logs", "description": "로그"}, {"command": "crawl", "description": "수집"}, {"command": "test", "description": "테스트"}]}
                     await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "👋 글로벌 금융 모니터링 시스템(GNS) 시작합니다!"})
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "👋 글로벌 10대 피드 모니터링 가동!"})
             return js.Response.new("OK")
         return js.Response.new("GNS Bot is Running.")
     except Exception as e:
