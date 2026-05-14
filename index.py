@@ -86,15 +86,14 @@ async def run_crawl_cycle(env, force=False):
                 if not force and await env.NEWS_KV.get(entry['id']): continue
                 
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                # 실명 제거 및 전문 분석가 페르소나 강화
                 prompt = f"""당신은 '글로벌 수석 금융 분석 에디터'입니다. 
 다음 뉴스를 전문적인 금융 리포트 스타일로 분석하세요.
 
 [분석 가이드라인]
 1. 거시 경제 흐름과 글로벌 증시/산업에 미칠 실질적 영향 분석.
 2. 시장 컨센서스와의 괴리나 투자자 주의 사항(리스크) 강조.
-3. 데이터 중심의 통찰력 있는 요약 (불필요한 수식어 배제).
-4. 제목은 눈에 띄게, 내용은 [핵심 요약] - [시장 영향] - [투자자 가이드] 순으로 작성.
+3. 데이터 중심의 통찰력 있는 요약.
+4. [핵심 요약] - [시장 영향] - [투자자 가이드] 순으로 작성.
 
 뉴스 제목: {entry['title']}
 뉴스 내용: {entry['description']}
@@ -149,7 +148,7 @@ async def on_fetch(request, env, ctx):
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                 elif text == "/csv":
                     worker_url = js.URL.new(request.url).origin
-                    msg = f"📅 <b>전략 리포트 아카이브</b>\n\n최근 기사 리포트 다운로드:\n\n{worker_url}/download-csv"
+                    msg = f"📅 <b>전략 리포트 아카이브</b>\n\n최근 수집된 기사 리포트 다운로드:\n\n{worker_url}/download-csv"
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                 elif text == "/crawl":
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 글로벌 모니터링 수집 중..."})
@@ -165,7 +164,9 @@ async def on_fetch(request, env, ctx):
                         {"command": "csv", "description": "리포트 다운로드"}
                     ]}
                     await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "📰 <b>GNS Professional</b> 가동!\n\n메뉴를 확인하세요."})
+                    # parse_mode="HTML" 추가
+                    welcome = "📰 <b>GNS Professional</b> 가동!\n\n아래 <b>메뉴 버튼</b>을 눌러 명령어를 확인하세요."
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": welcome, "parse_mode": "HTML"})
             return js.Response.new("OK")
         return js.Response.new("GNS is Ready.")
     except Exception as e:
