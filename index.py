@@ -150,8 +150,8 @@ async def on_fetch(request, env, ctx):
                 
                 title = clean_for_csv(item.get('title', ''))
                 summary = clean_for_csv(item.get('summary', ''))
-                # Excel hyperlink formula: =HYPERLINK("url","클릭") - no spaces!
-                link_formula = f'=HYPERLINK("{item["link"]}","클릭")'
+                # Excel hyperlink formula: =HYPERLINK("url","display_text") - no spaces!
+                link_formula = f'=HYPERLINK("{item["link"]}","▶ 원문보기")'
                 r = [item['source'], date_val, title, link_formula, summary]
                 csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
             headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=gns_report.csv"}
