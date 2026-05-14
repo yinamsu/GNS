@@ -185,14 +185,19 @@ async def on_fetch(request, env, ctx):
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 글로벌 모니터링 수집 중..."})
                     res = await run_crawl_cycle(env)
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"✅ {res}"})
+                elif text == "/setup":
+                    await env.NEWS_KV.put("KEY_TELEGRAM_CHAT_ID", str(chat_id))
+                    msg = "✅ <b>설정 완료!</b>\n\n이 방을 실시간 뉴스 수신지로 등록했습니다. 이제부터 모든 리포트가 이 방으로 전송됩니다."
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                 elif text == "/test":
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🧪 분석 성능 테스트 중..."})
                     res = await run_crawl_cycle(env, force=True)
                 elif text == "/start":
                     menu = {"commands": [
                         {"command": "crawl", "description": "🚀 실시간 글로벌 뉴스 수집"},
-                        {"command": "test", "description": "🧪 AI 분석 성능 테스트"},
+                        {"command": "setup", "description": "⚙️ 현재 방을 알림 수신지로 설정"},
                         {"command": "csv", "description": "📅 리포트(CSV) 다운로드"},
+                        {"command": "test", "description": "🧪 AI 분석 성능 테스트"},
                         {"command": "logs", "description": "📋 시스템 로그 확인"}
                     ]}
                     await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
