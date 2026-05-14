@@ -40,54 +40,72 @@ def parse_rss(xml_content):
         root = ET.fromstring(xml_content)
         items = []
         for item in root.findall(".//item") or root.findall(".//entry") or root.findall(".//{http://www.w3.org/2005/Atom}entry"):
-            def find_text(node, tag):
+            def find_tag(node, tag):
                 for t in [tag, f"{{http://www.w3.org/2005/Atom}}{tag}", f"{{http://purl.org/rss/1.0/}}{tag}"]:
                     found = node.find(t)
-                    if found is not None and found.text: return found.text
-                return ""
-            title = find_text(item, "title") or "Untitled"
+                    if found is not None: return found
+                return None
+            
+            title_node = find_tag(item, "title")
+            title = title_node.text if title_node is not None else "Untitled"
+            
+            # 링크 찾기 강화
             link = ""
-            lnode = item.find("link") or item.find("{http://www.w3.org/2005/Atom}link")
-            if lnode is not None: link = lnode.get("href") or lnode.text or ""
-            desc = find_text(item, "description") or find_text(item, "summary") or find_text(item, "content")
-            items.append({'title': title.strip(), 'link': link.strip(), 'description': desc[:500].strip(), 'id': link or title})
+            l_node = find_tag(item, "link")
+            if l_node is not None:
+                link = l_node.get("href") or l_node.text or ""
+            
+            # 만약 그래도 링크가 없다면 guid 등에서 찾기
+            if not link:
+                g_node = find_tag(item, "guid")
+                if g_node is not None and g_node.text and g_node.text.startswith("http"):
+                    link = g_node.text
+
+            desc_node = find_tag(item, "description") or find_tag(item, "summary") or find_tag(item, "content")
+            desc = desc_node.text if desc_node is not None else ""
+            
+            items.append({'title': str(title).strip(), 'link': str(link).strip(), 'description': str(desc)[:500].strip(), 'id': link or title})
         return items
     except: return []
 
-def safe_html(text):
-    return text.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;").replace("*", "")
+def clean_for_tg(text):
+    # HTML 특수문자 치환 및 마크다운 기호 정리
+    t = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    t = t.replace("##", "<b>■</b>").replace("#", "<b>•</b>")
+    t = t.replace("**", "") # 굵게 표시 제거 (HTML로 처리할 것이므로)
+    return t
 
 async def run_crawl_cycle(env, force=False):
-    await log_to_kv(env, f"Crawl (Force={force})")
     token = await get_secure_key(env, "TELEGRAM_TOKEN")
     chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
     gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
     model = await get_secure_key(env, "GEMINI_MODEL", "gemini-2.5-flash-lite")
-    if not token or not chat_id or not gemini_key: return "Missing Keys"
+    if not token or not chat_id or not gemini_key: return "Keys Missing"
 
-    count = 0
     for feed in DEFAULT_FEEDS:
         try:
             xml, _ = await fetch_url(feed['url'])
             items = parse_rss(xml)
-            # force 모드면 첫 번째 뉴스 무조건 분석
-            process_items = items[:1] if force else items[:2]
-            for entry in process_items:
+            targets = items[:1] if force else items[:2]
+            for entry in targets:
                 if not force and await env.NEWS_KV.get(entry['id']): continue
                 
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                p_load = {"contents": [{"parts": [{"text": f"뉴스 분석 요약: {entry['title']}\n{entry['description']}"}]}]}
-                res_txt, st = await fetch_url(g_url, method="POST", body=p_load)
+                prompt = f"금융 전문 기자로서 요약/분석하라:\n{entry['title']}\n{entry['description']}"
+                res_txt, st = await fetch_url(g_url, method="POST", body={"contents": [{"parts": [{"text": prompt}]}]})
                 
                 if st == 200:
                     ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
-                    msg = f"🔔 <b>{feed['name']}</b>\n\n{safe_html(ans)}\n\n<a href='{entry['link']}'>원문 보기</a>"
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+                    msg = f"🔔 <b>{feed['name']}</b>\n\n{clean_for_tg(ans)}"
+                    if entry['link']:
+                        # 링크가 있을 때만 확실하게 추가
+                        msg += f"\n\n🔗 <a href='{entry['link']}'>원문 보기 (클릭)</a>"
+                    
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML", "disable_web_page_preview": False})
                     if not force: await env.NEWS_KV.put(entry['id'], "true")
-                    count += 1
-                    if force: return f"테스트 성공: {entry['title'][:20]}" # 테스트는 1개만
+                    if force: return f"성공: {entry['title'][:15]}"
         except: pass
-    return f"Crawled {count} items."
+    return "Done"
 
 async def on_fetch(request, env, ctx):
     import js
@@ -104,30 +122,25 @@ async def on_fetch(request, env, ctx):
                 text = data["message"].get("text", "")
                 chat_id = data["message"]["chat"]["id"]
                 token = await get_secure_key(env, "TELEGRAM_TOKEN")
-                
                 if text == "/logs":
                     logs = await env.NEWS_KV.get("SYSTEM_LOGS")
                     logs_list = json.loads(logs) if logs else ["No logs."]
                     msg = "📋 <b>GNS Logs:</b>\n\n" + "\n".join(logs_list)
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                 elif text == "/crawl":
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 즉시 수집 시작..."})
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 즉시 수집..."})
                     res = await run_crawl_cycle(env)
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"✅ {res}"})
                 elif text == "/test":
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🧪 테스트 분석 중 (중복 무시)..."})
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🧪 테스트 분석 중..."})
                     res = await run_crawl_cycle(env, force=True)
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"✅ {res}"})
                 elif text == "/start":
-                    menu = {"commands": [
-                        {"command": "logs", "description": "로그 확인"},
-                        {"command": "crawl", "description": "즉시 수집"},
-                        {"command": "test", "description": "테스트 전송 (최신뉴스 1건)"}
-                    ]}
+                    menu = {"commands": [{"command": "logs", "description": "로그"}, {"command": "crawl", "description": "수집"}, {"command": "test", "description": "테스트"}]}
                     await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "👋 환영합니다! 메뉴에서 명령어를 선택하세요."})
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "👋 시작합니다!"})
             return js.Response.new("OK")
-        return js.Response.new("GNS Bot Running.")
+        return js.Response.new("GNS Running.")
     except Exception as e:
         return js.Response.new(f"CRASH: {str(e)}")
 
