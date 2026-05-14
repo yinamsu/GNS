@@ -1,5 +1,5 @@
 name = "gns"
-main = "src/index.py"
+main = "index.py"
 compatibility_date = "2024-05-01"
 compatibility_flags = ["python_workers"]
 
@@ -7,9 +7,7 @@ compatibility_flags = ["python_workers"]
 [triggers]
 crons = ["* * * * *"]
 
-# 데이터 저장소(KV) 바인딩 - 실제 ID로 교체
+# 데이터 저장소(KV) 바인딩
 [[kv_namespaces]]
 binding = "NEWS_KV"
 id = "1700ec2f6e1b4fd2aeafca587d2156ee"
-
-# 환경 변수 및 비밀값은 클라우드플레어 대시보드(Settings > Variables)에서 관리하는 것이 안전하므로 여기서는 생략합니다.
