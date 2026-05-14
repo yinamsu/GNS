@@ -18,11 +18,11 @@ async def log_to_kv(env, message):
         await env.NEWS_KV.put("SYSTEM_LOGS", json.dumps(logs_list[:30]))
     except: pass
 
-async def get_secure_key(env, key_name):
+async def get_secure_key(env, key_name, default=None):
     val = await env.NEWS_KV.get(f"KEY_{key_name}")
     if val: return val
-    try: return getattr(env, key_name, None)
-    except: return None
+    try: return getattr(env, key_name, default)
+    except: return default
 
 async def fetch_url(url, method="GET", body=None):
     import js
@@ -45,7 +45,7 @@ def parse_rss(xml_content):
                     found = node.find(t)
                     if found is not None and found.text: return found.text
                 return ""
-            title = find_text(item, "title") or "Untitled News"
+            title = find_text(item, "title") or "Untitled"
             link = ""
             lnode = item.find("link") or item.find("{http://www.w3.org/2005/Atom}link")
             if lnode is not None: link = lnode.get("href") or lnode.text or ""
@@ -66,22 +66,23 @@ async def on_fetch(request, env, ctx):
             token = await get_secure_key(env, "TELEGRAM_TOKEN")
             chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
             gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
+            # 모델명을 KV에서 가져옴 (기본값 gemini-1.5-flash)
+            model = await get_secure_key(env, "GEMINI_MODEL", "gemini-1.5-flash")
             
             xml, _ = await fetch_url(DEFAULT_FEEDS[0]['url'])
             items = parse_rss(xml)
             if not items: return js.Response.new("No items.")
             
             entry = items[0]
-            # 모델명을 gemini-1.5-flash로 수정
-            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-            p_load = {"contents": [{"parts": [{"text": f"한국어로 요약: {entry['title']}"}]}]}
+            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
+            p_load = {"contents": [{"parts": [{"text": f"요약: {entry['title']}"}]}]}
             res_txt, status = await fetch_url(g_url, method="POST", body=p_load)
             
             if status == 200:
                 ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
-                await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"🧪 <b>TEST</b>\n\n{ans}", "parse_mode": "HTML"})
-                return js.Response.new(f"OK: {entry['title']}")
-            return js.Response.new(f"Gemini Error: {status} - {res_txt}")
+                await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"🧪 <b>TEST ({model})</b>\n\n{ans}", "parse_mode": "HTML"})
+                return js.Response.new(f"OK ({model}): {entry['title']}")
+            return js.Response.new(f"Gemini Error ({model}): {status} - {res_txt}")
 
         return js.Response.new("GNS Bot is Running.")
     except Exception as e:
@@ -92,6 +93,7 @@ async def on_scheduled(event, env, ctx):
     token = await get_secure_key(env, "TELEGRAM_TOKEN")
     chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
     gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
+    model = await get_secure_key(env, "GEMINI_MODEL", "gemini-1.5-flash")
     if not token or not chat_id or not gemini_key: return
 
     for feed in DEFAULT_FEEDS:
@@ -100,8 +102,8 @@ async def on_scheduled(event, env, ctx):
             items = parse_rss(xml)
             for entry in items[:2]:
                 if await env.NEWS_KV.get(entry['id']): continue
-                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                p_load = {"contents": [{"parts": [{"text": f"금융 분석(한국어 요약): {entry['title']}\n{entry['description']}"}]}]}
+                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
+                p_load = {"contents": [{"parts": [{"text": f"금융 뉴스 요약: {entry['title']}\n{entry['description']}"}]}]}
                 res_txt, st = await fetch_url(g_url, method="POST", body=p_load)
                 if st == 200:
                     ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
