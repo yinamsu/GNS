@@ -9,10 +9,11 @@ DEFAULT_FEEDS = [
     {"name": "WSJ Markets", "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"},
     {"name": "CNBC Finance", "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069"},
     {"name": "FT World", "url": "https://www.ft.com/?format=rss"},
-    {"name": "MarketWatch", "url": "http://feeds.marketwatch.com/marketwatch/topstories/"},
     {"name": "Nikkei Asia", "url": "https://asia.nikkei.com/rss/feed/nar"},
+    {"name": "Japan Times", "url": "https://www.japantimes.co.jp/news_category/business/feed/"},
     {"name": "Euronews Biz", "url": "https://www.euronews.com/rss?level=vertical&name=business"},
-    {"name": "BBC Business", "url": "https://feeds.bbci.co.uk/news/business/rss.xml"}
+    {"name": "BBC Business", "url": "https://feeds.bbci.co.uk/news/business/rss.xml"},
+    {"name": "Handelsblatt", "url": "https://www.handelsblatt.com/contentexport/feed/top-themen/"}
 ]
 
 async def log_to_kv(env, message):
@@ -87,14 +88,20 @@ async def run_crawl_cycle(env, force=False):
             for entry in targets:
                 if not force and await env.NEWS_KV.get(entry['id']): continue
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                prompt = f"""당신은 '글로벌 수석 금융 분석 에디터'입니다. 
-다음 뉴스를 전문적인 금융 리포트 스타일로 분석하세요.
+                prompt = f"""당신은 '글로벌 수석 금융 분석 에디터'이자 증권·경제 전문 기자입니다. 
+다음 뉴스를 한국경제TV 독자들을 위한 심도 있는 금융 리포트 스타일로 분석하세요.
 
-[분석 가이드라인]
-1. 거시 경제 흐름과 글로벌 증시/산업에 미칠 실질적 영향 분석.
-2. 시장 컨센서스와의 괴리나 투자자 주의 사항(리스크) 강조.
-3. 데이터 중심의 통찰력 있는 요약.
-4. [핵심 요약] - [시장 영향] - [투자자 가이드] 순으로 작성.
+[분석 페르소나 & 가이드라인]
+1. 증권 분석: 종목별 목표주가 변동, MSCI 편입 등 수급 이슈, 실적 전망 등을 예리하게 짚어주세요.
+2. 거시 경제: 인플레이션, Fed 금리 전망, 지정학적 리스크가 국내외 증시에 미칠 영향을 분석하세요.
+3. 쩐널리즘(Jjournalism): 가상자산(크립토), 스캠 방지, 실질적인 재테크 팁 등 독자에게 유익한 '돈' 이야기를 포함하세요.
+4. 리스크 강조: 시장 컨센서스와의 괴리나 투자자가 놓치기 쉬운 잠재적 위험을 강조하세요.
+
+[출력 형식]
+- [핵심 요약]: 뉴스의 핵심을 1~2문장으로 정리.
+- [심층 분석]: 증권/거시/산업적 관점에서의 상세 분석.
+- [시장 영향 & 리스크]: 투자자가 주의해야 할 점과 향후 전망.
+- [투자자 가이드]: 전문 기자의 시각으로 제안하는 대응 전략.
 
 뉴스 제목: {entry['title']}
 뉴스 내용: {entry['description']}
@@ -124,7 +131,7 @@ async def on_fetch(request, env, ctx):
             archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
             if not archive: return js.Response.new("No data.")
             data = json.loads(archive)
-            csv = "Date,Source,Title,Summary,Link\n"
+            csv = "\ufeffDate,Source,Title,Summary,Link\n"
             for item in data:
                 r = [item['date'], item['source'], item['title'], item['summary'], item['link']]
                 csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
@@ -159,10 +166,10 @@ async def on_fetch(request, env, ctx):
                     res = await run_crawl_cycle(env, force=True)
                 elif text == "/start":
                     menu = {"commands": [
-                        {"command": "logs", "description": "시스템 로그 확인"},
-                        {"command": "crawl", "description": "즉시 뉴스 수집"},
-                        {"command": "test", "description": "분석 성능 테스트"},
-                        {"command": "csv", "description": "리포트 다운로드"}
+                        {"command": "crawl", "description": "🚀 실시간 글로벌 뉴스 수집"},
+                        {"command": "test", "description": "🧪 AI 분석 성능 테스트"},
+                        {"command": "csv", "description": "📅 리포트(CSV) 다운로드"},
+                        {"command": "logs", "description": "📋 시스템 로그 확인"}
                     ]}
                     await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
                     welcome = "📰 <b>GNS Professional</b> 가동!\n\n아래 <b>메뉴 버튼</b>을 눌러 4개의 명령어를 확인하세요."
