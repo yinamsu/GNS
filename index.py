@@ -170,6 +170,8 @@ async def on_fetch(request, env, ctx):
             data = json.loads(raw)
             if "message" in data:
                 text = data["message"].get("text", "")
+                if text.startswith("/"):
+                    text = text.split("@")[0]
                 chat_id = data["message"]["chat"]["id"]
                 token = await get_secure_key(env, "TELEGRAM_TOKEN")
                 if text == "/logs":
