@@ -55,8 +55,37 @@ def parse_rss(xml_content):
     except: return []
 
 def safe_html(text):
-    # 텔레그램 HTML 모드에서 에러를 유발하는 문자들 제거
     return text.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;").replace("*", "")
+
+async def run_crawl_cycle(env):
+    await log_to_kv(env, "Crawl Triggered")
+    token = await get_secure_key(env, "TELEGRAM_TOKEN")
+    chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
+    gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
+    model = await get_secure_key(env, "GEMINI_MODEL", "gemini-2.5-flash-lite")
+    
+    if not token or not chat_id or not gemini_key: return "Missing Keys"
+
+    count = 0
+    for feed in DEFAULT_FEEDS:
+        try:
+            xml, _ = await fetch_url(feed['url'])
+            items = parse_rss(xml)
+            for entry in items[:2]:
+                if await env.NEWS_KV.get(entry['id']): continue
+                
+                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
+                p_load = {"contents": [{"parts": [{"text": f"뉴스 분석 요약: {entry['title']}\n{entry['description']}"}]}]}
+                res_txt, st = await fetch_url(g_url, method="POST", body=p_load)
+                
+                if st == 200:
+                    ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
+                    msg = f"🔔 <b>{feed['name']}</b>\n\n{safe_html(ans)}\n\n<a href='{entry['link']}'>원문 보기</a>"
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+                    await env.NEWS_KV.put(entry['id'], "true")
+                    count += 1
+        except: pass
+    return f"Crawled {count} new items."
 
 async def on_fetch(request, env, ctx):
     import js
@@ -67,52 +96,34 @@ async def on_fetch(request, env, ctx):
             return js.Response.new(logs or "No logs.")
         
         if request.method == "POST":
-            # 가장 안전한 방식으로 바디 읽기
             raw = await request.text()
             data = json.loads(raw)
-            await log_to_kv(env, f"Cmd Received")
-            
             if "message" in data:
+                text = data["message"].get("text", "")
                 chat_id = data["message"]["chat"]["id"]
                 token = await get_secure_key(env, "TELEGRAM_TOKEN")
-                logs = await env.NEWS_KV.get("SYSTEM_LOGS")
-                logs_list = json.loads(logs) if logs else ["No logs."]
-                msg = "📋 <b>GNS Status Log:</b>\n\n" + "\n".join(logs_list)
-                await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
-            return js.Response.new("OK")
+                
+                if text == "/logs":
+                    logs = await env.NEWS_KV.get("SYSTEM_LOGS")
+                    logs_list = json.loads(logs) if logs else ["No logs."]
+                    msg = "📋 <b>GNS Logs:</b>\n\n" + "\n".join(logs_list)
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+                
+                elif text == "/crawl":
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 즉시 수집을 시작합니다..."})
+                    result = await run_crawl_cycle(env)
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": f"✅ 완료: {result}"})
+                
+                elif text == "/start":
+                    # 메뉴판 자동 등록
+                    menu = {"commands": [{"command": "logs", "description": "최근 로그 확인"}, {"command": "crawl", "description": "즉시 뉴스 수집"}]}
+                    await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "👋 안녕하세요! GNS 뉴스 봇입니다.\n\n메뉴 버튼을 눌러 명령어를 확인하세요!"})
             
+            return js.Response.new("OK")
         return js.Response.new("GNS Bot is Running.")
     except Exception as e:
-        await log_to_kv(env, f"Fetch Error: {str(e)}")
         return js.Response.new(f"CRASH: {str(e)}")
 
 async def on_scheduled(event, env, ctx):
-    await log_to_kv(env, "Cron Start")
-    token = await get_secure_key(env, "TELEGRAM_TOKEN")
-    chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
-    gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
-    model = await get_secure_key(env, "GEMINI_MODEL", "gemini-2.5-flash-lite")
-    if not token or not chat_id or not gemini_key: return
-
-    for feed in DEFAULT_FEEDS:
-        try:
-            xml, _ = await fetch_url(feed['url'])
-            items = parse_rss(xml)
-            for entry in items[:2]:
-                if await env.NEWS_KV.get(entry['id']): continue
-                
-                await log_to_kv(env, f"News: {entry['title'][:20]}")
-                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                prompt = f"금융 분석(한국어 요약): {entry['title']}\n{entry['description']}"
-                res_txt, st = await fetch_url(g_url, method="POST", body={"contents": [{"parts": [{"text": prompt}]}]})
-                
-                if st == 200:
-                    ans = json.loads(res_txt)['candidates'][0]['content']['parts'][0]['text']
-                    # HTML 안전 처리 추가
-                    clean_ans = safe_html(ans)
-                    msg = f"🔔 <b>{feed['name']}</b>\n\n{clean_ans}\n\n<a href='{entry['link']}'>원문 보기</a>"
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML", "disable_web_page_preview": False})
-                    await env.NEWS_KV.put(entry['id'], "true")
-        except Exception as e:
-            await log_to_kv(env, f"Err: {str(e)[:50]}")
-    await log_to_kv(env, "Cron Done")
+    await run_crawl_cycle(env)
