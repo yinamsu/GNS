@@ -124,7 +124,7 @@ async def run_crawl_cycle(env, force=False):
                     archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
                     archive_list = json.loads(archive) if archive else []
                     summary_clean = clean_for_csv(ans[:500])
-                    new_item = {"date": datetime.now().strftime("%m/%d %H:%M"), "source": feed['name'], "title": entry['title'], "summary": summary_clean, "link": entry['link']}
+                    new_item = {"date": datetime.now().strftime(" %m.%d %H:%M"), "source": feed['name'], "title": entry['title'], "summary": summary_clean, "link": entry['link']}
                     archive_list.insert(0, new_item)
                     await env.NEWS_KV.put("NEWS_ARCHIVE", json.dumps(archive_list[:500]))
                     if not force: await env.NEWS_KV.put(entry['id'], "true")
@@ -141,17 +141,18 @@ async def on_fetch(request, env, ctx):
             archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
             if not archive: return js.Response.new("No data.")
             data = json.loads(archive)
-            csv = "\ufeff날짜,매체,제목,링크,요약\n"
+            csv = "\ufeff매체,날짜,제목,링크,요약\n"
             for item in data:
                 # Clean on-the-fly for existing data
-                date_val = item.get('date', '')
-                if len(date_val) > 11: date_val = date_val[-11:] # Keep only MM/DD HH:MM
+                date_val = item.get('date', '').replace("/", ".")
+                if len(date_val) > 11: date_val = date_val[-11:]
+                if not date_val.startswith(" "): date_val = " " + date_val
                 
                 title = clean_for_csv(item.get('title', ''))
                 summary = clean_for_csv(item.get('summary', ''))
-                # Excel hyperlink formula: =HYPERLINK("url","display_text") - no spaces!
+                # Excel hyperlink formula: =HYPERLINK("url","클릭") - no spaces!
                 link_formula = f'=HYPERLINK("{item["link"]}","클릭")'
-                r = [date_val, item['source'], title, link_formula, summary]
+                r = [item['source'], date_val, title, link_formula, summary]
                 csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
             headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=gns_report.csv"}
             return js.Response.new(csv, js.JSON.parse(json.dumps({"headers": headers})))
