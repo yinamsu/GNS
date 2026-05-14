@@ -1,0 +1,12 @@
+telegram:
+  token: "8775777577:AAGDMlVKQziYS5stNimOT8DGsfY2AVTejV0"
+  chat_id: "64106898"
+gemini_api_key: "AIzaSyA6Rj_0jZsnyXtfSu0mnFfhC0c1b1pPzxk"
+feeds:
+  - name: "SEC Press"
+    url: "https://www.sec.gov/news/pressreleases.rss"
+  - name: "Bloomberg Finance"
+    url: "https://www.bloomberg.com/feeds/bfinance/most-read.xml"
+  - name: "Reuters Business"
+    url: "https://www.reutersagency.com/feed/?best-topics=business&post_type=best"
+interval: 60 # 1분 (속도 최적화)

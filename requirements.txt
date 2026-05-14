@@ -1,0 +1,5 @@
+feedparser
+pyyaml
+requests
+google-generativeai
+aiohttp

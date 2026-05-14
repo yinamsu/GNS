@@ -1,0 +1,17 @@
+# Local data
+seen_news.json
+*.log
+__pycache__/
+*.pyc
+
+# Local config (if needed to exclude)
+# config.yaml
+
+# Cloudflare local state
+.wrangler/
+dist/
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db

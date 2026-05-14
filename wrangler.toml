@@ -1,0 +1,18 @@
+name = "global-news-scrapper"
+main = "src/index.py"
+compatibility_date = "2024-05-01"
+
+# 1분마다 실행되는 스케줄러 설정
+[triggers]
+crons = ["* * * * *"]
+
+# 데이터 저장소(KV) 바인딩
+[[kv_namespaces]]
+binding = "NEWS_KV"
+id = "YOUR_KV_NAMESPACE_ID" # 나중에 대시보드에서 생성 후 채워넣으세요.
+
+# 환경 변수 (민감한 정보는 나중에 Secrets로 등록하는 것을 권장합니다)
+[vars]
+TELEGRAM_TOKEN = "8775777577:AAGDMlVKQziYS5stNimOT8DGsfY2AVTejV0"
+TELEGRAM_CHAT_ID = "64106898"
+GEMINI_API_KEY = "AIzaSyA6Rj_0jZsnyXtfSu0mnFfhC0c1b1pPzxk"
