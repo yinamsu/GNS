@@ -131,9 +131,9 @@ async def on_fetch(request, env, ctx):
             archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
             if not archive: return js.Response.new("No data.")
             data = json.loads(archive)
-            csv = "\ufeffDate,Source,Title,Summary,Link\n"
+            csv = "\ufeff날짜,매체,링크,제목,요약\n"
             for item in data:
-                r = [item['date'], item['source'], item['title'], item['summary'], item['link']]
+                r = [item['date'], item['source'], item['link'], item['title'], item['summary']]
                 csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
             headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=gns_report.csv"}
             return js.Response.new(csv, js.JSON.parse(json.dumps({"headers": headers})))
