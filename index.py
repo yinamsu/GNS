@@ -141,7 +141,7 @@ async def on_fetch(request, env, ctx):
             archive = await env.NEWS_KV.get("NEWS_ARCHIVE")
             if not archive: return js.Response.new("No data.")
             data = json.loads(archive)
-            csv = "\ufeff매체          ,날짜          ,제목                                        ,링크            ,요약\n"
+            csv = "\ufeff\"매체          \",\"날짜          \",\"제목                                        \",\"링크            \",\"요약\"\n"
             for item in data:
                 # Clean on-the-fly for existing data
                 date_val = item.get('date', '').replace("/", ".")
@@ -152,8 +152,8 @@ async def on_fetch(request, env, ctx):
                 link_formula = f'=HYPERLINK("{item["link"]}","▶ 원문보기")'
                 r = [
                     item['source'].strip(),
-                    date_val.strip(),
-                    title.strip(),
+                    " " + date_val.strip(),
+                    title.strip().ljust(50),
                     link_formula,
                     summary.strip()
                 ]
