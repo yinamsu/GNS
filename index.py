@@ -76,8 +76,8 @@ def clean_for_csv(text):
     import re
     # Remove markdown bold/header symbols
     t = re.sub(r'[*#\-]', '', text)
-    # Normalize multiple newlines
-    t = re.sub(r'\n+', '\n', t)
+    # Replace all newlines with a space to prevent tall cells in Excel (limit to 2-3 visual rows)
+    t = re.sub(r'\s*\n\s*', ' ', t)
     return t.strip()
 
 async def run_crawl_cycle(env, force=False):
@@ -146,19 +146,18 @@ async def on_fetch(request, env, ctx):
                 # Clean on-the-fly for existing data
                 date_val = item.get('date', '').replace("/", ".")
                 if len(date_val) > 11: date_val = date_val[-11:]
-                if not date_val.startswith(" "): date_val = " " + date_val
                 
                 title = clean_for_csv(item.get('title', ''))
                 summary = clean_for_csv(item.get('summary', ''))
                 link_formula = f'=HYPERLINK("{item["link"]}","▶ 원문보기")'
                 r = [
-                    item['source'].ljust(12),
-                    date_val.ljust(12),
-                    title.ljust(40),
-                    link_formula.ljust(15),
-                    summary
+                    item['source'].strip(),
+                    date_val.strip(),
+                    title.strip(),
+                    link_formula,
+                    summary.strip()
                 ]
-                csv += ",".join([f'"{str(v).replace('"', '""')}"' for v in r]) + "\n"
+                csv += ",".join([f'"{str(v).replace("\"", "\"\"")}"' for v in r]) + "\n"
             headers = {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=gns_report.csv"}
             return js.Response.new(csv, js.JSON.parse(json.dumps({"headers": headers})))
         if "/view-logs" in url_str:
