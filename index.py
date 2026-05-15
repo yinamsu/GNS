@@ -195,21 +195,21 @@ async def on_fetch(request, env, ctx):
                         {"command": "crawl", "description": "🚀 실시간 글로벌 뉴스 수집"},
                         {"command": "setup", "description": "⚙️ 현재 방을 알림 수신지로 설정"},
                         {"command": "csv", "description": "📅 리포트(CSV) 다운로드"},
-                        {"command": "test", "description": "🧪 AI 분석 성능 테스트"},
+                        {"command": "test", "description": "🧪 최신 뉴스 즉시 수집 (강제)"},
                         {"command": "logs", "description": "📋 시스템 로그 확인"}
                     ], "scope": {"type": "chat", "chat_id": chat_id}}
                     await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
                     msg = "✅ <b>설정 완료!</b>\n\n이 방을 실시간 뉴스 수신지로 등록하고 메뉴판 설정을 마쳤습니다."
                     await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
                 elif text == "/test":
-                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🧪 분석 성능 테스트 중..."})
+                    await fetch_url(f"https://api.telegram.org/bot{token}/sendMessage", method="POST", body={"chat_id": chat_id, "text": "🚀 최신 이슈 강제 수집 중..."})
                     res = await run_crawl_cycle(env, force=True)
                 elif text == "/start":
                     menu = {"commands": [
                         {"command": "crawl", "description": "🚀 실시간 글로벌 뉴스 수집"},
                         {"command": "setup", "description": "⚙️ 현재 방을 알림 수신지로 설정"},
                         {"command": "csv", "description": "📅 리포트(CSV) 다운로드"},
-                        {"command": "test", "description": "🧪 AI 분석 성능 테스트"},
+                        {"command": "test", "description": "🧪 최신 뉴스 즉시 수집 (강제)"},
                         {"command": "logs", "description": "📋 시스템 로그 확인"}
                     ]}
                     await fetch_url(f"https://api.telegram.org/bot{token}/setMyCommands", method="POST", body=menu)
