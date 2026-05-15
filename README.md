@@ -4,8 +4,9 @@
 
 ## ✨ 핵심 기능
 
-### 1. 초고속 글로벌 모니터링 (High-Speed Monitoring)
-- **글로벌 인텔리전스 채널**: SEC, Bloomberg, Reuters, FT, WSJ, Nikkei Asia, Handelsblatt 등 주요 10개 이상의 글로벌 매체를 24/7 감시합니다.
+### 1. 초고속 글로벌 및 트위터(X) 모니터링
+- **글로벌 인텔리전스 채널**: SEC, Bloomberg, Reuters, FT, WSJ 등 주요 매체와 더불어 **트위터(X)의 초고속 속보 계정(@WalterBloomberg, @DeItaone 등)**을 24/7 감시합니다.
+- **언론사보다 빠른 속보**: 기성 언론의 보도 이전에 트위터를 통해 흐르는 시장의 '시그널'을 먼저 포착하여 브리핑합니다.
 - **실시간 인사이트**: Cloudflare Workers 스케줄러를 통해 전 세계의 핫 이슈를 포착 즉시 분석하여 보고합니다.
 
 ### 2. 기자를 위한 인텔리전스 브리핑 (Reporter Intelligence)

@@ -13,7 +13,10 @@ DEFAULT_FEEDS = [
     {"name": "Japan Times", "url": "https://www.japantimes.co.jp/news_category/business/feed/"},
     {"name": "Euronews Biz", "url": "https://www.euronews.com/rss?level=vertical&name=business"},
     {"name": "BBC Business", "url": "https://feeds.bbci.co.uk/news/business/rss.xml"},
-    {"name": "Handelsblatt", "url": "https://www.handelsblatt.com/contentexport/feed/top-themen/"}
+    {"name": "Handelsblatt", "url": "https://www.handelsblatt.com/contentexport/feed/top-themen/"},
+    {"name": "X-Bloomberg", "url": "https://nitter.cz/WalterBloomberg/rss"},
+    {"name": "X-Deltaone", "url": "https://nitter.cz/DeItaone/rss"},
+    {"name": "X-Spectator", "url": "https://nitter.cz/spectatorindex/rss"}
 ]
 
 async def log_to_kv(env, message):
