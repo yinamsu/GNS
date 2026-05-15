@@ -95,7 +95,7 @@ async def run_crawl_cycle(env, force=False):
             targets = items[:1]
             for entry in targets:
                 if not force and await env.NEWS_KV.get(entry['id']): continue
-                if "이민재" in entry['title'] or "이민재" in entry['description']: continue
+                if any(kw in (entry['title'] + entry['description']) for kw in ["이민재", "한국경제TV", "한경TV", "hankyung"]): continue
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
                 prompt = f"""당신은 '글로벌 수석 금융 분석 에디터'이자 증권·경제 전문 기자입니다. 
 다음 뉴스를 한국경제TV 독자들을 위한 심도 있는 금융 리포트 스타일로 분석하세요.
