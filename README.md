@@ -29,7 +29,7 @@
 
 ## 🛠 기술 스택
 - **Runtime**: Cloudflare Workers (Python Environment)
-- **AI Engine**: Google Gemini 2.5 Flash-lite (Journalist Intelligence Mode)
+- **AI Engine**: Google Gemini 3.5 Flash-lite (Journalist Intelligence Mode)
 - **Storage**: Cloudflare Workers KV (State & Key Management)
 - **Communication**: Telegram Bot API
 
