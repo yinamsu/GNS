@@ -87,7 +87,7 @@ async def run_crawl_cycle(env, force=False):
     token = await get_secure_key(env, "TELEGRAM_TOKEN")
     chat_id = await get_secure_key(env, "TELEGRAM_CHAT_ID")
     gemini_key = await get_secure_key(env, "GEMINI_API_KEY")
-    model = await get_secure_key(env, "GEMINI_MODEL", "gemini-2.5-flash-lite")
+    model = await get_secure_key(env, "GEMINI_MODEL", "gemini-3.5-flash-lite")
     if not token or not chat_id or not gemini_key: return "Keys Missing"
 
     count = 0
