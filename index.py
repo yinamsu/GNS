@@ -64,7 +64,12 @@ def parse_rss(xml_content):
             if not link:
                 g_node = find_tag(item, "guid")
                 if g_node is not None and g_node.text and g_node.text.startswith("http"): link = g_node.text
-            desc_node = find_tag(item, "description") or find_tag(item, "summary") or find_tag(item, "content")
+            desc_node = None
+            for tag in ["description", "summary", "content"]:
+                node = find_tag(item, tag)
+                if node is not None:
+                    desc_node = node
+                    break
             desc = desc_node.text if desc_node is not None else ""
             items.append({'title': str(title).strip(), 'link': str(link).strip(), 'description': str(desc)[:500].strip(), 'id': link or title})
         return items
