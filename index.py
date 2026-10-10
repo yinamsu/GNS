@@ -1,6 +1,10 @@
 import json
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
+
+RE_MARKDOWN = re.compile(r'[*#\-]')
+RE_NEWLINES = re.compile(r'\s*\n\s*')
 
 DEFAULT_FEEDS = [
     {"name": "SEC News", "url": "https://www.sec.gov/news/pressreleases.rss"},
@@ -50,7 +54,8 @@ def parse_rss(xml_content):
     try:
         root = ET.fromstring(xml_content)
         items = []
-        for item in root.findall(".//item") or root.findall(".//entry") or root.findall(".//{http://www.w3.org/2005/Atom}entry"):
+        nodes = root.findall(".//item") or root.findall(".//entry") or root.findall(".//{http://www.w3.org/2005/Atom}entry")
+        for item in nodes[:1]:
             def find_tag(node, tag):
                 for t in [tag, f"{{http://www.w3.org/2005/Atom}}{tag}", f"{{http://purl.org/rss/1.0/}}{tag}"]:
                     found = node.find(t)
@@ -81,11 +86,10 @@ def clean_for_tg(text):
     return t
 
 def clean_for_csv(text):
-    import re
     # Remove markdown bold/header symbols
-    t = re.sub(r'[*#\-]', '', text)
+    t = RE_MARKDOWN.sub('', text)
     # Replace all newlines with a space to prevent tall cells in Excel (limit to 2-3 visual rows)
-    t = re.sub(r'\s*\n\s*', ' ', t)
+    t = RE_NEWLINES.sub(' ', t)
     return t.strip()
 
 async def run_crawl_cycle(env, force=False):
@@ -134,7 +138,7 @@ async def run_crawl_cycle(env, force=False):
                     summary_clean = clean_for_csv(ans[:500])
                     new_item = {"date": datetime.now().strftime(" %m.%d %H:%M"), "source": feed['name'], "title": entry['title'], "summary": summary_clean, "link": entry['link']}
                     archive_list.insert(0, new_item)
-                    await env.NEWS_KV.put("NEWS_ARCHIVE", json.dumps(archive_list[:500]))
+                    await env.NEWS_KV.put("NEWS_ARCHIVE", json.dumps(archive_list[:200]))
                     if not force: await env.NEWS_KV.put(entry['id'], "true")
                     count += 1
                     if force: return f"성공: {entry['title'][:15]}"
